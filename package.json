@@ -1,0 +1,35 @@
+{
+  "name": "pay-with-zend-cli",
+  "version": "0.1.0",
+  "description": "CLI for Pay with Zend — pair your Zend account via device approval (no typed secrets), manage API keys, configure webhooks, and test payment requests.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "zend": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "pay-with-zend-sdk": "workspace:*",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/qrcode-terminal": "^0.12.2",
+    "fast-check": "^3.19.0",
+    "tsup": "^8.0.2",
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0"
+  }
+}
