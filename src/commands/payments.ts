@@ -1,32 +1,17 @@
 /**
  * `zend payments test` — Sandbox Mode dry run (Requirement 3.12).
  *
- * Deliberately implemented as a pure client-side validation pass that never
- * calls the live backend: it mirrors the exact validation bounds enforced
- * by `dev_payment_requests.rs` (amount 0.01-100000, expiry 1-60 minutes,
- * HTTPS-only URLs <=2048 chars) and reports what WOULD happen, without
- * creating a row in `user_payment_requests`, moving any funds, or
- * triggering any Developer Webhook Event delivery. This is the strictest
- * possible reading of "does not move real funds and does not deliver live
- * Developer Webhook Events" — there is no live-request code path at all.
+ * Calls the backend's `/api/v1/dev/payment-requests/test` endpoint, which
+ * runs the exact same validation the live `createZendPayment()` call runs,
+ * but never creates a payment request, moves funds, or delivers a live
+ * Developer Webhook Event. Requires the CLI to be logged in, since the
+ * dry-run is scoped to the authenticated Developer's own account (same
+ * scope requirement as the live endpoint) rather than being a generic,
+ * unauthenticated client-side linter.
  */
 import { Command } from "commander";
-
-const MIN_AMOUNT_USDC = 0.01;
-const MAX_AMOUNT_USDC = 100_000.0;
-const MIN_EXPIRY_MINUTES = 1;
-const MAX_EXPIRY_MINUTES = 60;
-const DEFAULT_EXPIRY_MINUTES = 15;
-
-function isValidHttpsUrl(value: string): boolean {
-  if (value.length > 2048) return false;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+import { createZendClient } from "pay-with-zend-sdk";
+import { getBaseUrl, getStoredApiKey } from "../config-store.js";
 
 export function registerPaymentsCommand(program: Command): void {
   const payments = program.command("payments").description("Test and inspect payment requests");
@@ -36,65 +21,50 @@ export function registerPaymentsCommand(program: Command): void {
     .description("Validate a payment request in Sandbox Mode — no real funds move, no live webhooks fire")
     .option("--amount <usdc>", "Amount in USDC", "10.00")
     .option("--description <text>", "Description")
-    .option("--expires-in-minutes <minutes>", "Expiry in minutes (1-60)", String(DEFAULT_EXPIRY_MINUTES))
+    .option("--expires-in-minutes <minutes>", "Expiry in minutes (1-60)", "15")
     .option("--redirect-url <url>", "HTTPS redirect URL")
     .option("--webhook-url <url>", "HTTPS webhook URL override")
-    .action((opts: {
+    .action(async (opts: {
       amount: string;
       description?: string;
       expiresInMinutes: string;
       redirectUrl?: string;
       webhookUrl?: string;
     }) => {
-      const errors: string[] = [];
-
-      const amount = Number.parseFloat(opts.amount);
-      if (!Number.isFinite(amount) || amount < MIN_AMOUNT_USDC || amount > MAX_AMOUNT_USDC) {
-        errors.push(`amount must be between ${MIN_AMOUNT_USDC} and ${MAX_AMOUNT_USDC}`);
-      }
-
-      const expiresInMinutes = Number.parseInt(opts.expiresInMinutes, 10);
-      if (
-        !Number.isFinite(expiresInMinutes) ||
-        expiresInMinutes < MIN_EXPIRY_MINUTES ||
-        expiresInMinutes > MAX_EXPIRY_MINUTES
-      ) {
-        errors.push(`expires-in-minutes must be between ${MIN_EXPIRY_MINUTES} and ${MAX_EXPIRY_MINUTES}`);
-      }
-
-      if (opts.description && opts.description.length > 500) {
-        errors.push("description must be 500 characters or fewer");
-      }
-
-      if (opts.redirectUrl && !isValidHttpsUrl(opts.redirectUrl)) {
-        errors.push("redirect-url must be a well-formed HTTPS URL, <=2048 characters");
-      }
-
-      if (opts.webhookUrl && !isValidHttpsUrl(opts.webhookUrl)) {
-        errors.push("webhook-url must be a well-formed HTTPS URL, <=2048 characters");
-      }
-
-      if (errors.length > 0) {
-        console.error("Sandbox validation failed:");
-        for (const err of errors) console.error(`  - ${err}`);
+      const apiKey = getStoredApiKey();
+      if (!apiKey) {
+        console.error("Not logged in. Run `zend login` first.");
         process.exitCode = 1;
         return;
       }
 
-      console.log("Sandbox Mode: this request is valid and WOULD be created. No real funds move.");
-      console.log("No live Developer Webhook Event will be delivered for this dry run.");
-      console.log("");
-      console.log(JSON.stringify(
-        {
+      const amount = Number.parseFloat(opts.amount);
+      const expiresInMinutes = Number.parseInt(opts.expiresInMinutes, 10);
+      if (!Number.isFinite(amount) || !Number.isFinite(expiresInMinutes)) {
+        console.error("--amount and --expires-in-minutes must be numbers.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const client = createZendClient({ apiKey, baseUrl: getBaseUrl() });
+
+      try {
+        const result = await client.testPaymentRequest({
           amountUsdc: amount,
-          description: opts.description ?? null,
+          description: opts.description,
           expiresInMinutes,
-          redirectUrl: opts.redirectUrl ?? null,
-          webhookUrl: opts.webhookUrl ?? null,
-          sandbox: true,
-        },
-        null,
-        2,
-      ));
+          redirectUrl: opts.redirectUrl,
+          webhookUrl: opts.webhookUrl,
+        });
+
+        console.log("Sandbox Mode: this request is valid and WOULD be created. No real funds move.");
+        console.log("No live Developer Webhook Event will be delivered for this dry run.");
+        console.log("");
+        console.log(JSON.stringify(result, null, 2));
+      } catch (err) {
+        console.error("Sandbox validation failed:");
+        console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+      }
     });
 }
