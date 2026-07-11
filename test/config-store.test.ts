@@ -52,8 +52,8 @@ describe("config-store", () => {
     expect(getStoredApiKey()).toBeUndefined();
   });
 
-  it("getBaseUrl defaults to https://zdfi.me", () => {
+  it("getBaseUrl defaults to https://api-v2.zendfi.tech", () => {
     if (existsSync(configFile)) rmSync(configFile);
-    expect(getBaseUrl()).toBe("https://zdfi.me");
+    expect(getBaseUrl()).toBe("https://api-v2.zendfi.tech");
   });
 });

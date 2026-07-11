@@ -2,9 +2,9 @@
 
 The command-line tool for **Pay with Zend**. Pair your own Zend account, manage API keys, configure webhooks, and test payment requests — all from your terminal.
 
-There's no separate "developer" account here — you're just using your existing Zend account programmatically. Anything you create through this CLI settles to your own wallet, the same one the Zend App uses.
+There's no separate "developer" account here — you're just using your existing Zend account programmatically. Anything you create through this CLI settles to your own Zend account, the same one the Zend App uses.
 
-> Building an integration in code instead? See [`pay-with-zend-sdk`](../zend-sdk/README.md) — this CLI is a thin wrapper around it.
+> Building an integration in code instead? See [`pay-with-zend-sdk`](../zend-ts-sdk/README.md) (TypeScript), [`zend-go-sdk`](../zend-go-sdk/README.md) (Go), or [`pay-with-zend-sdk`](../zend-py-sdk/README.md) (Python) — this CLI is a thin wrapper around the TypeScript SDK.
 
 ## Installation
 
@@ -101,7 +101,7 @@ No live Developer Webhook Event will be delivered for this dry run.
 {
   "sandbox": true,
   "valid": true,
-  "amountUsdc": 25,
+  "amount": 25,
   "description": "Order #1024",
   "expiresInMinutes": 15,
   "redirectUrl": "https://yourapp.com/checkout/return",
@@ -135,7 +135,7 @@ All commands (other than `login`) read your API key from `~/.zend/config.json`:
 {
   "apiKey": "zdev_live_...",
   "webhookUrl": "https://yourapp.com/webhooks/zend",
-  "baseUrl": "https://zdfi.me"
+  "baseUrl": "https://api-v2.zendfi.tech"
 }
 ```
 

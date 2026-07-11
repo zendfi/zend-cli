@@ -52,7 +52,7 @@ describe("zend payments test (Requirement 3.12: Sandbox Mode)", () => {
     const testPaymentRequest = vi.fn().mockResolvedValue({
       sandbox: true,
       valid: true,
-      amountUsdc: 25.5,
+      amount: 25.5,
       description: "test payment",
       expiresInMinutes: 15,
       redirectUrl: null,
@@ -73,7 +73,7 @@ describe("zend payments test (Requirement 3.12: Sandbox Mode)", () => {
     ]);
 
     expect(testPaymentRequest).toHaveBeenCalledWith({
-      amountUsdc: 25.5,
+      amount: 25.5,
       description: "test payment",
       expiresInMinutes: 15,
       redirectUrl: undefined,
@@ -85,7 +85,7 @@ describe("zend payments test (Requirement 3.12: Sandbox Mode)", () => {
   it("surfaces a validation failure from the backend as a non-zero exit", async () => {
     writeFileSync(configFile, JSON.stringify({ apiKey: "zdev_test_key" }), { mode: 0o600 });
 
-    const testPaymentRequest = vi.fn().mockRejectedValue(new Error("amount_usdc must be between 0.01 and 100000"));
+    const testPaymentRequest = vi.fn().mockRejectedValue(new Error("amount must be between 0.01 and 100000"));
     const { createZendClient } = await import("pay-with-zend-sdk");
     (createZendClient as ReturnType<typeof vi.fn>).mockReturnValue({ testPaymentRequest });
 

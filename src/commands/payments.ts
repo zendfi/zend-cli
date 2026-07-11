@@ -19,7 +19,7 @@ export function registerPaymentsCommand(program: Command): void {
   payments
     .command("test")
     .description("Validate a payment request in Sandbox Mode — no real funds move, no live webhooks fire")
-    .option("--amount <usdc>", "Amount in USDC", "10.00")
+    .option("--amount <amount>", "Amount in USD", "10.00")
     .option("--description <text>", "Description")
     .option("--expires-in-minutes <minutes>", "Expiry in minutes (1-60)", "15")
     .option("--redirect-url <url>", "HTTPS redirect URL")
@@ -50,7 +50,7 @@ export function registerPaymentsCommand(program: Command): void {
 
       try {
         const result = await client.testPaymentRequest({
-          amountUsdc: amount,
+          amount,
           description: opts.description,
           expiresInMinutes,
           redirectUrl: opts.redirectUrl,
