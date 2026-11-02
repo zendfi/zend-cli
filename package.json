@@ -1,6 +1,6 @@
 {
   "name": "pay-with-zend-cli",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "CLI for Pay with Zend — pair your Zend account via device approval (no typed secrets), manage API keys, configure webhooks, and test payment requests.",
   "license": "MIT",
   "type": "module",

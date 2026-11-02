@@ -8,8 +8,30 @@ import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { getBaseUrl, getStoredApiKey } from "../config-store.js";
 
+/** Network failures worth one more try: slow DNS or connect, reset. */
+const RETRYABLE = new Set(["UND_ERR_CONNECT_TIMEOUT", "EAI_AGAIN", "ECONNRESET", "ETIMEDOUT"]);
+
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (e: any) {
+      // Node reports every network failure as "fetch failed"; the reason is
+      // in e.cause. Without it a slow resolver looked like a dead API.
+      const code: string | undefined = e?.cause?.code;
+      if (attempt < 3 && code && RETRYABLE.has(code)) continue;
+      const host = new URL(url).host;
+      console.error(`Couldn't reach ${host}: ${code ?? "network error"}${e?.cause?.message ? ` (${e.cause.message})` : ""}`);
+      if (code === "UND_ERR_CONNECT_TIMEOUT" || code === "EAI_AGAIN" || code === "ENOTFOUND") {
+        console.error("This is usually slow or failing DNS on this machine. Check `getent hosts " + host + "`.");
+      }
+      process.exit(1);
+    }
+  }
+}
+
 async function call(method: string, path: string, key: string, body?: unknown): Promise<any> {
-  const r = await fetch(`${getBaseUrl()}${path}`, {
+  const r = await fetchWithRetry(`${getBaseUrl()}${path}`, {
     method,
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -71,6 +93,42 @@ export function registerAppsCommand(program: Command): void {
         : await call("PUT", `/api/v1/dev/apps/${await appIdForSlug(loginKey(), manifest.app)}/manifest`, loginKey(), manifest);
       console.log(`Deployed ${manifest.app} v${r.manifest_version} (${r.status}).`);
       console.log(`Open it: https://app.usezend.app/apps/${manifest.app}`);
+    });
+
+  apps.command("rotate-key <slug>").description("Replace the app API key (and optionally the webhook secret)")
+    .option("--webhook-secret", "rotate only the webhook secret")
+    .option("--both", "rotate the API key and the webhook secret")
+    .action(async (slug: string, opts: { webhookSecret?: boolean; both?: boolean }) => {
+      const key = loginKey();
+      const which = opts.both ? "both" : opts.webhookSecret ? "webhook_secret" : "api_key";
+      const r = await call("POST", `/api/v1/dev/apps/${await appIdForSlug(key, slug)}/rotate`, key, { which });
+      console.log("Rotated. The old value stopped working just now.\n");
+      if (r.api_key) console.log(`  ZEND_APP_KEY=${r.api_key}`);
+      if (r.webhook_secret) console.log(`  ZEND_WEBHOOK_SECRET=${r.webhook_secret}`);
+      console.log("\nUpdate your server and CI secrets now.");
+    });
+
+  apps.command("review <slug>").description("Show listing review status and findings")
+    .action(async (slug: string) => {
+      const key = loginKey();
+      const r = await call("GET", `/api/v1/dev/apps/${await appIdForSlug(key, slug)}/review`, key);
+      console.log(`Status: ${r.status}`);
+      for (const rv of r.reviews) {
+        console.log(`  v${rv.manifest_version}  ${rv.result}  ${rv.at}`);
+        for (const f of rv.findings ?? []) console.log(`    - ${f}`);
+      }
+      if (r.status === "in_review") console.log("\nAutomated checks run within a minute; a Zend admin then approves the listing.");
+    });
+
+  apps.command("resolver-key").description("Generate a resolver key for prizes (keep the seed on your server)")
+    .action(async () => {
+      const { randomBytes, createPrivateKey, createPublicKey } = await import("node:crypto");
+      const seed = randomBytes(32);
+      const der = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]);
+      const pub = (createPublicKey(createPrivateKey({ key: der, format: "der", type: "pkcs8" }))
+        .export({ format: "der", type: "spki" }) as Buffer).subarray(-32).toString("hex");
+      console.log("Put this in zapp.json:\n  \"resolverKey\": \"" + pub + "\"\n");
+      console.log("Keep this secret on your server only:\n  ZEND_RESOLVER_SEED=" + seed.toString("hex"));
     });
 
   apps.command("testers").description("Manage testers")
