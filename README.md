@@ -30,7 +30,7 @@ This is the **only** way to authenticate — there is no flag or prompt anywhere
 
 1. The CLI creates a pairing session and prints an approval link, plus a QR code for scanning on your phone.
 2. Open the link (or scan the QR code) — it opens directly inside the Zend App, showing an approval screen naming this CLI.
-3. Approve it with your existing PIN or biometrics, exactly like confirming a payment.
+3. Tap **Approve** and confirm it's you with Google (or your PIN on older accounts).
 4. The CLI polls in the background and, once approved, retrieves your API key automatically and saves it to `~/.zend/config.json` (mode `0600` — owner read/write only).
 
 ```
@@ -135,7 +135,7 @@ All commands (other than `login`) read your API key from `~/.zend/config.json`:
 {
   "apiKey": "zdev_live_...",
   "webhookUrl": "https://yourapp.com/webhooks/zend",
-  "baseUrl": "https://api-v2.zendfi.tech"
+  "baseUrl": "https://api.usezend.app"
 }
 ```
 

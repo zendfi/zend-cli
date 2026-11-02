@@ -54,10 +54,10 @@ export function getStoredApiKey(): string | undefined {
 
 /**
  * Returns the configured backend API base URL, defaulting to
- * `https://api-v2.zendfi.tech`. `zdfi.me` is the human-facing web
+ * `https://api.usezend.app`. `zdfi.me` is the human-facing web
  * app/link domain only — it has no API routes, so it must never be used
  * here.
  */
 export function getBaseUrl(): string {
-  return readConfig().baseUrl ?? "https://api-v2.zendfi.tech";
+  return readConfig().baseUrl ?? "https://api.usezend.app";
 }
