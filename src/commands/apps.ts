@@ -54,14 +54,18 @@ function loginKey(): string {
   return k;
 }
 
-async function appIdForSlug(key: string, slug: string): Promise<string> {
+async function appForSlug(key: string, slug: string): Promise<any> {
   const { apps } = await call("GET", "/api/v1/dev/apps", key);
   const app = apps.find((a: any) => a.slug === slug);
   if (!app) {
     console.error(`No app "${slug}" on your account. Create it with \`zend apps create ${slug} "<Name>"\`.`);
     process.exit(1);
   }
-  return app.id;
+  return app;
+}
+
+async function appIdForSlug(key: string, slug: string): Promise<string> {
+  return (await appForSlug(key, slug)).id;
 }
 
 export function registerAppsCommand(program: Command): void {
@@ -81,7 +85,10 @@ export function registerAppsCommand(program: Command): void {
     .action(async () => {
       const { apps: list } = await call("GET", "/api/v1/dev/apps", loginKey());
       if (!list.length) return console.log("No apps yet.");
-      for (const a of list) console.log(`${a.slug.padEnd(24)} ${a.status.padEnd(10)} ${a.visibility.padEnd(8)} v${a.manifest_version ?? "-"}`);
+      console.log(`${"SLUG".padEnd(20)} ${"ID".padEnd(36)}  ${"STATUS".padEnd(10)} ${"VISIBILITY".padEnd(10)} ${"TIER".padEnd(8)} VERSION`);
+      for (const a of list) {
+        console.log(`${a.slug.padEnd(20)} ${a.id}  ${a.status.padEnd(10)} ${a.visibility.padEnd(10)} ${a.tier.padEnd(8)} v${a.manifest_version ?? "-"}`);
+      }
     });
 
   apps.command("deploy [manifest]").description("Upload a manifest (default ./zapp.json)")
@@ -91,8 +98,13 @@ export function registerAppsCommand(program: Command): void {
       const r = appKey
         ? await call("PUT", "/api/zend/v2/apps/server/manifest", appKey, manifest)
         : await call("PUT", `/api/v1/dev/apps/${await appIdForSlug(loginKey(), manifest.app)}/manifest`, loginKey(), manifest);
-      console.log(`Deployed ${manifest.app} v${r.manifest_version} (${r.status}).`);
-      console.log(`Open it: https://app.usezend.app/apps/${manifest.app}`);
+      console.log(`Deployed ${manifest.app} v${r.manifest_version}`);
+      console.log(`  id:     ${r.id}`);
+      console.log(`  status: ${r.status}`);
+      console.log(`  open:   https://app.usezend.app/apps/${manifest.app}`);
+      if (r.status === "in_review") {
+        console.log(`\nPublic apps are checked automatically, then approved by Zend. Track it: zend apps review ${manifest.app}`);
+      }
     });
 
   apps.command("rotate-key <slug>").description("Replace the app API key (and optionally the webhook secret)")
@@ -106,6 +118,27 @@ export function registerAppsCommand(program: Command): void {
       if (r.api_key) console.log(`  ZEND_APP_KEY=${r.api_key}`);
       if (r.webhook_secret) console.log(`  ZEND_WEBHOOK_SECRET=${r.webhook_secret}`);
       console.log("\nUpdate your server and CI secrets now.");
+    });
+
+  apps.command("info <slug>").description("Show an app's id, status, tier and latest review")
+    .option("--json", "print raw JSON")
+    .action(async (slug: string, opts: { json?: boolean }) => {
+      const key = loginKey();
+      const app = await appForSlug(key, slug);
+      const review = await call("GET", `/api/v1/dev/apps/${app.id}/review`, key);
+      const latest = review.reviews?.[0];
+      if (opts.json) return console.log(JSON.stringify({ ...app, review: latest ?? null }, null, 2));
+      console.log(`${app.name} (${app.slug})`);
+      console.log(`  id:         ${app.id}`);
+      console.log(`  status:     ${app.status}`);
+      console.log(`  visibility: ${app.visibility}`);
+      console.log(`  tier:       ${app.tier}`);
+      console.log(`  manifest:   v${app.manifest_version ?? "-"}`);
+      console.log(`  open:       https://app.usezend.app/apps/${app.slug}`);
+      if (latest) {
+        console.log(`  review:     v${latest.manifest_version} ${latest.result} (${latest.at})`);
+        for (const f of latest.findings ?? []) console.log(`              - ${f}`);
+      }
     });
 
   apps.command("review <slug>").description("Show listing review status and findings")
