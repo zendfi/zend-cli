@@ -81,6 +81,20 @@ zend config get webhookUrl
 
 Sets your account's global webhook URL. Individual payment requests created via the SDK can still override this per-request.
 
+### `zend apps`
+
+```bash
+zend apps create <slug> "<Name>"   # prints ZEND_APP_KEY once
+zend apps check [zapp.json]        # check interaction rules without uploading
+zend apps deploy [zapp.json]       # runs the same check first, then uploads
+zend apps payout <slug> <username> # where your app's share of split payments goes
+```
+
+`check` (and `deploy`) stop on interaction-rule mistakes the server would also refuse: unknown
+states, a move listed twice, and unknown keys in a transition. A misspelt `serverOnly` would
+otherwise leave a move open to every player, so it gets a "did you mean" hint. Both list the moves
+only your server can make, for example `challenge: accepted → resolved`.
+
 ### `zend payments test`
 
 Sandbox Mode — validates a payment request against the real backend without creating it, moving any funds, or firing a webhook.

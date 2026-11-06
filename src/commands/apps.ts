@@ -7,6 +7,7 @@
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { getBaseUrl, getStoredApiKey } from "../config-store.js";
+import { checkManifest } from "../manifest-check.js";
 
 /** Network failures worth one more try: slow DNS or connect, reset. */
 const RETRYABLE = new Set(["UND_ERR_CONNECT_TIMEOUT", "EAI_AGAIN", "ECONNRESET", "ETIMEDOUT"]);
@@ -68,6 +69,29 @@ async function appIdForSlug(key: string, slug: string): Promise<string> {
   return (await appForSlug(key, slug)).id;
 }
 
+function readManifest(file: string): any {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch (e: any) {
+    console.error(`Couldn't read ${file}: ${e?.message ?? e}`);
+    process.exit(1);
+  }
+}
+
+/** Local interaction-rule checks; lists the server-only moves so nothing is a surprise. */
+function checkOrExit(manifest: unknown): void {
+  const { errors, serverOnly } = checkManifest(manifest);
+  if (errors.length) {
+    console.error("The manifest has problems:");
+    for (const e of errors) console.error(`  - ${e}`);
+    process.exit(1);
+  }
+  if (serverOnly.length) {
+    console.log("Only your server (with ZEND_APP_KEY) can make these moves:");
+    for (const s of serverOnly) console.log(`  - ${s}`);
+  }
+}
+
 export function registerAppsCommand(program: Command): void {
   const apps = program.command("apps").description("Register and deploy ZApps");
 
@@ -91,9 +115,16 @@ export function registerAppsCommand(program: Command): void {
       }
     });
 
+  apps.command("check [manifest]").description("Check a manifest's interaction rules without uploading (default ./zapp.json)")
+    .action((file = "zapp.json") => {
+      checkOrExit(readManifest(file));
+      console.log(`${file} looks right. The server checks the rest when you deploy.`);
+    });
+
   apps.command("deploy [manifest]").description("Upload a manifest (default ./zapp.json)")
     .action(async (file = "zapp.json") => {
-      const manifest = JSON.parse(readFileSync(file, "utf8"));
+      const manifest = readManifest(file);
+      checkOrExit(manifest);
       const appKey = process.env.ZEND_APP_KEY;
       const r = appKey
         ? await call("PUT", "/api/zend/v2/apps/server/manifest", appKey, manifest)
@@ -105,6 +136,13 @@ export function registerAppsCommand(program: Command): void {
       if (r.status === "in_review") {
         console.log(`\nPublic apps are checked automatically, then approved by Zend. Track it: zend apps review ${manifest.app}`);
       }
+    });
+
+  apps.command("payout <slug> <username>").description("Set the Zend account that receives your app's share of split payments")
+    .action(async (slug: string, username: string) => {
+      const key = loginKey();
+      const r = await call("PUT", `/api/v1/dev/apps/${await appIdForSlug(key, slug)}/payout`, key, { username });
+      console.log(`Your app's share of split payments now goes to ${r.payout}.`);
     });
 
   apps.command("rotate-key <slug>").description("Replace the app API key (and optionally the webhook secret)")
