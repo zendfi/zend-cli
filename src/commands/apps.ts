@@ -172,6 +172,15 @@ export function registerAppsCommand(program: Command): void {
       console.log(`  visibility: ${app.visibility}`);
       console.log(`  tier:       ${app.tier}`);
       console.log(`  manifest:   v${app.manifest_version ?? "-"}`);
+      const nb = app.network_budget;
+      if (nb) {
+        const pct = nb.budget_mist > 0 ? Math.max(0, Math.round((nb.used_mist / nb.budget_mist) * 100)) : 0;
+        console.log(`  network:    ${nb.used_sui.toFixed(4)} of ${nb.budget_sui} SUI this month (${pct}%), resets ${nb.resets}`);
+        if (nb.used_mist >= nb.budget_mist) {
+          console.log("              Over budget: new links, prizes and joins are refused (APP_GAS_BUDGET).");
+          console.log("              Collecting, taking back, results and payouts still go through.");
+        }
+      }
       console.log(`  open:       https://app.usezend.app/apps/${app.slug}`);
       if (latest) {
         console.log(`  review:     v${latest.manifest_version} ${latest.result} (${latest.at})`);
