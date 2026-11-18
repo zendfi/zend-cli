@@ -2,7 +2,7 @@
 
 The Zend CLI (`zend`): build on Zend, the money network for the internet, from your terminal. Log in with your phone, create and deploy ZApps, manage API keys and webhooks, and test **Pay with Zend** payment requests.
 
-Docs: https://docs.usezend.app/cli/overview
+Docs: https://developers.usezend.app/cli/overview
 
 There's no separate "developer" account here — you're just using your existing Zend account programmatically. Anything you create through this CLI settles to your own Zend account, the same one the Zend App uses.
 
