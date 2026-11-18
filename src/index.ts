@@ -13,6 +13,7 @@ import { registerConfigCommand } from "./commands/config.js";
 import { registerPaymentsCommand } from "./commands/payments.js";
 import { registerLogsCommand } from "./commands/logs.js";
 import { registerAppsCommand } from "./commands/apps.js";
+import { registerBotCommand } from "./commands/bot.js";
 
 const pkg = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8")
@@ -22,7 +23,7 @@ const program = new Command();
 
 program
   .name("zend")
-  .description("Pay with Zend — pair your account, manage keys, and create payment requests from the command line")
+  .description("Build on Zend: create and deploy ZApps, manage API keys, and test payment requests")
   .version(pkg.version);
 
 registerLoginCommand(program);
@@ -31,6 +32,7 @@ registerConfigCommand(program);
 registerPaymentsCommand(program);
 registerLogsCommand(program);
 registerAppsCommand(program);
+registerBotCommand(program);
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : String(err));

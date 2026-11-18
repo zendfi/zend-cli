@@ -46,6 +46,53 @@ async function call(method: string, path: string, key: string, body?: unknown): 
   return json;
 }
 
+const ICON_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+
+/** Reads and checks an icon file locally: type and size. Zend checks the rest. */
+function readIcon(file: string): { bytes: Buffer; type: string } {
+  const ext = file.split(".").pop()?.toLowerCase() ?? "";
+  const type = ICON_TYPES[ext];
+  if (!type) {
+    console.error("Icons must be .png, .jpg or .webp files.");
+    process.exit(1);
+  }
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(file);
+  } catch {
+    console.error(`Can't read ${file}`);
+    process.exit(1);
+  }
+  if (bytes.length > 1024 * 1024) {
+    console.error(`Icons can be up to 1 MB; ${file} is ${Math.round(bytes.length / 1024)} KB.`);
+    process.exit(1);
+  }
+  return { bytes, type };
+}
+
+/** Uploads an icon. Zend checks it (square, 256 px or more, up to 1 MB) and hosts it. */
+async function uploadIcon(path: string, key: string, icon: { bytes: Buffer; type: string }): Promise<any> {
+  const r = await fetchWithRetry(`${getBaseUrl()}${path}`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${key}`, "content-type": icon.type },
+    body: new Uint8Array(icon.bytes),
+  });
+  const json: any = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    console.error(`${json.error ?? `HTTP ${r.status}`}: ${json.message ?? ""}`);
+    process.exit(1);
+  }
+  return json;
+}
+
+function printIcon(r: any) {
+  if (r.status === "pending_review") {
+    console.log("Icon uploaded. It shows once Zend reviews it; your current icon stays until then.");
+  } else {
+    console.log(`Icon is live: ${r.icon_url}`);
+  }
+}
+
 function loginKey(): string {
   const k = getStoredApiKey();
   if (!k) {
@@ -96,9 +143,12 @@ export function registerAppsCommand(program: Command): void {
   const apps = program.command("apps").description("Register and deploy ZApps");
 
   apps.command("create <slug> <name>").description("Create a private ZApp")
-    .action(async (slug: string, name: string) => {
+    .option("--icon <file>", "square PNG, JPEG or WebP, at least 256 px, up to 1 MB")
+    .action(async (slug: string, name: string, opts: { icon?: string }) => {
+      const icon = opts.icon ? readIcon(opts.icon) : null;
       const r = await call("POST", "/api/v1/dev/apps", loginKey(), { slug, name });
       console.log(`Created ${r.slug} (${r.id}).\n`);
+      if (icon) printIcon(await uploadIcon(`/api/v1/dev/apps/${r.id}/icon`, loginKey(), icon));
       console.log("Save these now, they won't be shown again:");
       console.log(`  ZEND_APP_KEY=${r.api_key}`);
       console.log(`  ZEND_WEBHOOK_SECRET=${r.webhook_secret}\n`);
@@ -138,6 +188,17 @@ export function registerAppsCommand(program: Command): void {
       }
     });
 
+  apps.command("icon <slug> <file>")
+    .description("Set your app's icon: a square PNG, JPEG or WebP, at least 256 px, up to 1 MB")
+    .action(async (slug: string, file: string) => {
+      const icon = readIcon(file);
+      const appKey = process.env.ZEND_APP_KEY;
+      const r = appKey
+        ? await uploadIcon("/api/zend/v2/apps/server/icon", appKey, icon)
+        : await uploadIcon(`/api/v1/dev/apps/${await appIdForSlug(loginKey(), slug)}/icon`, loginKey(), icon);
+      printIcon(r);
+    });
+
   apps.command("payout <slug> <username>").description("Set the Zend account that receives your app's share of split payments")
     .action(async (slug: string, username: string) => {
       const key = loginKey();
@@ -172,6 +233,8 @@ export function registerAppsCommand(program: Command): void {
       console.log(`  visibility: ${app.visibility}`);
       console.log(`  tier:       ${app.tier}`);
       console.log(`  manifest:   v${app.manifest_version ?? "-"}`);
+      console.log(`  icon:       ${app.icon_url ?? "none (zend apps icon " + app.slug + " ./icon.png)"}`);
+      if (app.pending_icon_url) console.log(`              new icon waiting for review: ${app.pending_icon_url}`);
       const nb = app.network_budget;
       if (nb) {
         const pct = nb.budget_mist > 0 ? Math.max(0, Math.round((nb.used_mist / nb.budget_mist) * 100)) : 0;

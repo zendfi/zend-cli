@@ -1,6 +1,8 @@
 # pay-with-zend-cli
 
-The command-line tool for **Pay with Zend**. Pair your own Zend account, manage API keys, configure webhooks, and test payment requests — all from your terminal.
+The Zend CLI (`zend`): build on Zend, the money network for the internet, from your terminal. Log in with your phone, create and deploy ZApps, manage API keys and webhooks, and test **Pay with Zend** payment requests.
+
+Docs: https://docs.usezend.app/cli/overview
 
 There's no separate "developer" account here — you're just using your existing Zend account programmatically. Anything you create through this CLI settles to your own Zend account, the same one the Zend App uses.
 
@@ -87,6 +89,7 @@ Sets your account's global webhook URL. Individual payment requests created via 
 zend apps create <slug> "<Name>"   # prints ZEND_APP_KEY once
 zend apps check [zapp.json]        # check interaction rules without uploading
 zend apps deploy [zapp.json]       # runs the same check first, then uploads
+zend apps icon <slug> <file>       # square PNG/JPEG/WebP, 256 px+, up to 1 MB; Zend hosts it
 zend apps payout <slug> <username> # where your app's share of split payments goes
 ```
 
@@ -94,6 +97,40 @@ zend apps payout <slug> <username> # where your app's share of split payments go
 states, a move listed twice, and unknown keys in a transition. A misspelt `serverOnly` would
 otherwise leave a move open to every player, so it gets a "did you mean" hint. Both list the moves
 only your server can make, for example `challenge: accepted → resolved`.
+
+### `zend bot`
+
+```bash
+zend bot create "Match Reminder" --handle matchbot \
+  --scopes read,dm_send,post_card,send_money,receive_money   # you approve it in the Zend App
+zend bot list                                  # bots on this machine
+zend bot me matchbot                           # check it can sign in, and see its limits
+zend bot balance matchbot
+zend bot chats matchbot
+zend bot say matchbot @alice "Your match is at 6"
+zend bot post matchbot "Daily check: all quiet."
+zend bot pay matchbot @alice 2.50 --note "Thanks"
+zend bot deposit matchbot                      # make received funds spendable
+```
+
+A bot is a Zend account your code runs, marked **Automated** for everyone else. Making one needs a
+Zend account that has passed the verified person check; you can own up to 5. The bot's signing key
+is made on this machine and stays in `~/.zend/bots/<handle>.json` (mode `0600`); only its address
+is sent to Zend. Its API key (`zbot_live_...`) lasts 90 days.
+
+What a key can do depends on its scopes (`read`, `dm_send`, `post_card`, `send_money`,
+`receive_money`), and the owner sets the limits in the Zend App:
+
+- **Messages:** a bot can reply to people who wrote to it first. The owner can let it write first.
+  Direct chats only.
+- **Payments:** people can pay a bot by @handle. A bot pays within a per-payment limit (at most 499),
+  a daily limit and an optional list of allowed recipients. Raising a limit needs the owner to confirm
+  it's them. Limits apply to payments sent through Zend.
+- **Posts:** up to 280 characters, 6 an hour. Only people who have chatted with or paid the bot, and its
+  owner, see them in their Feed. The owner can turn posting off.
+
+HTTP: `Authorization: Bearer zbot_live_...` on `https://api.usezend.app/api/v1/bot/...`. See
+`.kiro/specs/bot-accounts/design.md` for the routes.
 
 ### `zend payments test`
 
