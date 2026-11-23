@@ -12,7 +12,7 @@ import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from "no
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { getBaseUrl } from "../config-store.js";
+import { getBaseUrl, getStoredApiKey } from "../config-store.js";
 
 interface StoredBot {
   handle: string;
@@ -88,6 +88,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function registerBotCommand(program: Command): void {
   const bot = program.command("bot").description("Create and use automated accounts");
+  registerBotSettingsCommand(bot);
 
   bot
     .command("create <name>")
@@ -171,7 +172,7 @@ export function registerBotCommand(program: Command): void {
 
   bot
     .command("say <handle> <to> <text...>")
-    .description("Send a message as the bot to @someone (they must have written first unless first contact is on)")
+    .description("Send a message as the bot to @someone (they must have written first, use its app, or first contact is on)")
     .action(async (handle: string, to: string, text: string[]) => {
       const a = authed(handle);
       const chat = await call(`/api/v1/bot/dm/with/${encodeURIComponent(to.replace(/^@/, ""))}`, { method: "POST", ...a });
@@ -235,5 +236,175 @@ export function registerBotCommand(program: Command): void {
         ...authed(handle),
       });
       console.log(`Posted (${out.id}).`);
+    });
+
+  const webhook = bot.command("webhook").description("Send the bot's events to your server");
+
+  webhook
+    .command("set <handle> <url>")
+    .description("Set the webhook. The secret is shown once, when it's new.")
+    .option("--events <list>", "only these events, comma-separated")
+    .option("--rotate", "make a new secret")
+    .action(async (handle: string, url: string, opts: { events?: string; rotate?: boolean }) => {
+      const out = await call("/api/v1/bot/webhook", {
+        method: "PUT",
+        body: JSON.stringify({ url, events: opts.events?.split(",").map((e) => e.trim()), rotate: !!opts.rotate }),
+        ...authed(handle),
+      });
+      console.log(`Webhook set: ${out.url}`);
+      if (out.secret) console.log(`Secret (shown once): ${out.secret}`);
+    });
+
+  webhook
+    .command("show <handle>")
+    .description("The webhook and how its last delivery went")
+    .action(async (handle: string) => {
+      console.log(JSON.stringify(await call("/api/v1/bot/webhook", authed(handle)), null, 2));
+    });
+
+  webhook
+    .command("test <handle>")
+    .description("Send a bot.ping to the webhook now")
+    .action(async (handle: string) => {
+      console.log(JSON.stringify(await call("/api/v1/bot/webhook/test", { method: "POST", ...authed(handle) }), null, 2));
+    });
+
+  webhook
+    .command("delete <handle>")
+    .description("Stop sending events to a server")
+    .action(async (handle: string) => {
+      await call("/api/v1/bot/webhook", { method: "DELETE", ...authed(handle) });
+      console.log("Webhook removed.");
+    });
+
+  bot
+    .command("events <handle>")
+    .description("The bot's recent events (kept for 7 days). --follow keeps listening.")
+    .option("--after <seq>", "only events after this number", "0")
+    .option("--follow", "keep the connection open and print events as they happen")
+    .action(async (handle: string, opts: { after: string; follow?: boolean }) => {
+      const a = authed(handle);
+      if (!opts.follow) {
+        console.log(JSON.stringify(await call(`/api/v1/bot/events?after=${encodeURIComponent(opts.after)}`, a), null, 2));
+        return;
+      }
+      const res = await fetch(`${getBaseUrl()}/api/v1/bot/events/stream?after=${encodeURIComponent(opts.after)}`, {
+        headers: { ...a.headers, accept: "text/event-stream" },
+      });
+      if (!res.ok || !res.body) throw new Error(`Couldn't open the stream (${res.status}).`);
+      const decoder = new TextDecoder();
+      let buf = "";
+      for await (const chunk of res.body as any as AsyncIterable<Uint8Array>) {
+        buf += decoder.decode(chunk, { stream: true });
+        let cut: number;
+        while ((cut = buf.indexOf("\n\n")) >= 0) {
+          const block = buf.slice(0, cut);
+          buf = buf.slice(cut + 2);
+          const data = block.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+          if (data) console.log(data);
+        }
+      }
+    });
+}
+
+// ── Owner settings (`zend login` key) ───────────────────────────────────────
+// Tightening applies at once. Anything that lets the bot do more prints a link; the owner approves
+// it in the Zend App with "confirm it's you", so a stolen login key alone can never loosen a bot.
+
+function ownerKey(): string {
+  const k = getStoredApiKey();
+  if (!k) throw new Error("Not logged in as the bot's owner. Run `zend login` first.");
+  return k;
+}
+
+async function ownerCall(method: string, path: string, body?: unknown): Promise<any> {
+  return call(path, {
+    method,
+    headers: { authorization: `Bearer ${ownerKey()}` },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+const onOff = (v: string | undefined, flag: string): boolean | undefined => {
+  if (v === undefined) return undefined;
+  if (v === "on") return true;
+  if (v === "off") return false;
+  throw new Error(`${flag} takes on or off.`);
+};
+
+const amount = (v: string | undefined, flag: string): number | undefined => {
+  if (v === undefined) return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${flag} takes an amount in dollars, like 5.`);
+  return n;
+};
+
+export function registerBotSettingsCommand(bot: Command): void {
+  bot
+    .command("settings <handle>")
+    .description("Show or change a bot's settings as its owner (run `zend login` first)")
+    .option("--first-contact <on|off>", "on: message anyone; off: only people who wrote first or use its app")
+    .option("--posting <on|off>", "post to the feed")
+    .option("--per-payment <amount>", "most it sends in one payment, in dollars (up to 499)")
+    .option("--per-day <amount>", "most it sends in a day, in dollars")
+    .option("--allow <handles>", "only pay these people, comma-separated (empty for nobody)")
+    .option("--allow-anyone", "pay anyone")
+    .option("--rpm <n>", "requests a minute (1-600)")
+    .action(async (handle: string, opts: {
+      firstContact?: string; posting?: string; perPayment?: string; perDay?: string;
+      allow?: string; allowAnyone?: boolean; rpm?: string;
+    }) => {
+      const h = handle.replace(/^@/, "").toLowerCase();
+      const { bots } = await ownerCall("GET", "/api/v1/dev/bots");
+      const b = (bots as any[]).find((x) => String(x.handle).toLowerCase() === h);
+      if (!b) throw new Error(`@${h} isn't one of your bots.`);
+
+      const changes = {
+        dm_first_contact: onOff(opts.firstContact, "--first-contact"),
+        posting_enabled: onOff(opts.posting, "--posting"),
+        per_payment: amount(opts.perPayment, "--per-payment"),
+        per_day: amount(opts.perDay, "--per-day"),
+        recipient_allowlist: opts.allow === undefined ? undefined
+          : opts.allow.split(",").map((s) => s.trim().replace(/^@/, "")).filter(Boolean),
+        clear_allowlist: !!opts.allowAnyone,
+        requests_per_minute: opts.rpm === undefined ? undefined : Number(opts.rpm),
+      };
+      const nothing = Object.entries(changes).every(([k, v]) => (k === "clear_allowlist" ? v === false : v === undefined));
+      if (nothing) {
+        const l = b.limits;
+        console.log(`@${b.handle}  ${b.name}${b.suspended ? "  (paused)" : ""}`);
+        if (b.app) console.log(`  from app       ${b.app.name} (${b.app.slug}): can message people who connected it`);
+        console.log(`  first contact  ${l.dm_first_contact ? "on" : "off"}`);
+        console.log(`  posting        ${l.posting_enabled ? "on" : "off"}`);
+        console.log(`  per payment    ${l.per_payment}`);
+        console.log(`  per day        ${l.per_day}`);
+        console.log(`  pays           ${l.recipient_allowlist == null ? "anyone" : l.recipient_allowlist.length ? l.recipient_allowlist.map((t: string) => `@${t}`).join(", ") : "nobody"}`);
+        console.log(`  requests/min   ${l.requests_per_minute}`);
+        return;
+      }
+
+      const out = await ownerCall("PATCH", `/api/v1/dev/bots/${b.id}/settings`, changes);
+      if (out.applied) {
+        console.log(`Done. @${b.handle} has its new settings.`);
+        return;
+      }
+      console.log(`\nThis lets @${b.handle} do more, so approve it in the Zend App:\n`);
+      for (const c of out.changes ?? []) console.log(`  - ${c}`);
+      console.log(`\n  ${out.approval_url}\n`);
+      qrcodeTerminal.generate(out.approval_url, { small: true }, (qr: string) => console.log(qr));
+      console.log(`Waiting for approval (expires ${out.expires_at})...`);
+      for (;;) {
+        await sleep(2000);
+        const { status } = await ownerCall("GET", `/api/v1/dev/bots/settings-requests/${out.request_id}`);
+        if (status === "pending") {
+          process.stdout.write(".");
+          continue;
+        }
+        console.log("");
+        if (status === "approved") return console.log(`Done. @${b.handle} has its new settings.`);
+        console.error(status === "denied" ? "Not approved. Nothing changed." : "The request expired. Run the command again.");
+        process.exitCode = 1;
+        return;
+      }
     });
 }
