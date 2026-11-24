@@ -53,7 +53,7 @@ function readIcon(file: string): { bytes: Buffer; type: string } {
   const ext = file.split(".").pop()?.toLowerCase() ?? "";
   const type = ICON_TYPES[ext];
   if (!type) {
-    console.error("Icons must be .png, .jpg or .webp files.");
+    console.error("Icons must be .png, .jpg, .jpeg or .webp files.");
     process.exit(1);
   }
   let bytes: Buffer;
@@ -71,7 +71,8 @@ function readIcon(file: string): { bytes: Buffer; type: string } {
 }
 
 /** Uploads an icon. Zend checks it (square, 256 px or more, up to 1 MB) and hosts it. */
-async function uploadIcon(path: string, key: string, icon: { bytes: Buffer; type: string }): Promise<any> {
+/** `hint` is printed after the error, e.g. to say what already happened before the upload. */
+async function uploadIcon(path: string, key: string, icon: { bytes: Buffer; type: string }, hint?: string): Promise<any> {
   const r = await fetchWithRetry(`${getBaseUrl()}${path}`, {
     method: "PUT",
     headers: { authorization: `Bearer ${key}`, "content-type": icon.type },
@@ -80,6 +81,7 @@ async function uploadIcon(path: string, key: string, icon: { bytes: Buffer; type
   const json: any = await r.json().catch(() => ({}));
   if (!r.ok) {
     console.error(`${json.error ?? `HTTP ${r.status}`}: ${json.message ?? ""}`);
+    if (hint) console.error(hint);
     process.exit(1);
   }
   return json;
@@ -148,10 +150,15 @@ export function registerAppsCommand(program: Command): void {
       const icon = opts.icon ? readIcon(opts.icon) : null;
       const r = await call("POST", "/api/v1/dev/apps", loginKey(), { slug, name });
       console.log(`Created ${r.slug} (${r.id}).\n`);
-      if (icon) printIcon(await uploadIcon(`/api/v1/dev/apps/${r.id}/icon`, loginKey(), icon));
+      // Keys first: they're shown only once, and the icon upload below can still be refused.
       console.log("Save these now, they won't be shown again:");
       console.log(`  ZEND_APP_KEY=${r.api_key}`);
       console.log(`  ZEND_WEBHOOK_SECRET=${r.webhook_secret}\n`);
+      if (icon) {
+        printIcon(await uploadIcon(`/api/v1/dev/apps/${r.id}/icon`, loginKey(), icon,
+          `The app was created; only the icon wasn't saved. Fix the image and run: zend apps icon ${r.slug} <file>`));
+        console.log("");
+      }
       console.log(`Next: zend apps deploy zapp.json`);
     });
 

@@ -111,26 +111,30 @@ zend bot say matchbot @alice "Your match is at 6"
 zend bot post matchbot "Daily check: all quiet."
 zend bot pay matchbot @alice 2.50 --note "Thanks"
 zend bot deposit matchbot                      # make received funds spendable
+zend bot events matchbot --follow
+zend bot webhook set matchbot https://example.com/zend
+zend bot settings matchbot --per-day 50        # as the owner, after zend login
 ```
 
 A bot is a Zend account your code runs, marked **Automated** for everyone else. Making one needs a
-Zend account that has passed the verified person check; you can own up to 5. The bot's signing key
+Zend account that has passed the verified person check and signs in with Google; you can own up to 5. The bot's signing key
 is made on this machine and stays in `~/.zend/bots/<handle>.json` (mode `0600`); only its address
 is sent to Zend. Its API key (`zbot_live_...`) lasts 90 days.
 
-What a key can do depends on its scopes (`read`, `dm_send`, `post_card`, `send_money`,
-`receive_money`), and the owner sets the limits in the Zend App:
+What a key can do depends on its scopes (`read`, `dm_send`, `post_card`, `send_money`;
+`receive_money` is reserved). The owner sets the limits with `zend bot settings`; anything that
+lets the bot do more is approved in the Zend App:
 
-- **Messages:** a bot can reply to people who wrote to it first. The owner can let it write first.
-  Direct chats only.
+- **Messages:** a bot can reply to people who wrote to it first, or who use the ZApp it's linked to.
+  The owner can let it write first. Direct chats only.
 - **Payments:** people can pay a bot by @handle. A bot pays within a per-payment limit (at most 499),
   a daily limit and an optional list of allowed recipients. Raising a limit needs the owner to confirm
   it's them. Limits apply to payments sent through Zend.
-- **Posts:** up to 280 characters, 6 an hour. Only people who have chatted with or paid the bot, and its
-  owner, see them in their Feed. The owner can turn posting off.
+- **Posts:** up to 280 characters, 6 an hour and 30 a day. Only people who have chatted with the bot,
+  paid it or been paid by it, and its owner, see them in their Feed. The owner can turn posting off.
 
 HTTP: `Authorization: Bearer zbot_live_...` on `https://api.usezend.app/api/v1/bot/...`. See
-`.kiro/specs/bot-accounts/design.md` for the routes.
+https://developers.usezend.app/bots and https://developers.usezend.app/reference/rest-api#bot-accounts.
 
 ### `zend payments test`
 
