@@ -188,7 +188,7 @@ All commands (other than `login`) read your API key from `~/.zend/config.json`:
 
 ```json
 {
-  "apiKey": "zdev_live_...",
+  "apiKey": "zdevice_live_...",
   "webhookUrl": "https://yourapp.com/webhooks/zend",
   "baseUrl": "https://api.usezend.app"
 }
@@ -219,3 +219,7 @@ Check the `response_code` — delivery retries follow an exponential backoff (1 
 ## License
 
 MIT
+
+## Devices
+
+`zend device pair <name>` adds an ESP32, Arduino or Raspberry Pi board that asks people to pay you. Approve it in the Zend app (Settings → Devices). Then `zend device request <name> <naira>` shows a payment QR as the device and `zend device events <name> --follow` shows its signed events. See the [Devices guide](https://docs.usezend.app/devices).

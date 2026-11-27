@@ -14,6 +14,7 @@ import { registerPaymentsCommand } from "./commands/payments.js";
 import { registerLogsCommand } from "./commands/logs.js";
 import { registerAppsCommand } from "./commands/apps.js";
 import { registerBotCommand } from "./commands/bot.js";
+import { registerDeviceCommand } from "./commands/device.js";
 
 const pkg = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8")
@@ -33,6 +34,7 @@ registerPaymentsCommand(program);
 registerLogsCommand(program);
 registerAppsCommand(program);
 registerBotCommand(program);
+registerDeviceCommand(program);
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : String(err));

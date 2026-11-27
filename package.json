@@ -1,7 +1,7 @@
 {
   "name": "pay-with-zend-cli",
-  "version": "0.5.1",
-  "description": "The Zend CLI: build on the money network for the internet. Log in with your phone, create and deploy ZApps, manage API keys and webhooks, and test payment requests.",
+  "version": "0.6.0",
+  "description": "The Zend CLI: build on the money network for the internet.",
   "license": "MIT",
   "type": "module",
   "bin": {
